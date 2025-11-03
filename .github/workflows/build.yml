@@ -1,0 +1,135 @@
+name: Build Dawn Binaries
+
+on:
+  push:
+    paths:
+      - 'third_party/webgpu/dawn/dawn-git-tag.txt'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  build-dawn-linux:
+    runs-on: ubuntu-latest
+    container: dockcross/manylinux_2_28-x64:latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+    name: Build Dawn Binaries
+
+on:
+  push:
+    paths:
+      - 'third_party/webgpu/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    container: dockcross/manylinux_2_28-x64:latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: >
+        dnf install -y mesa-libGL-devel libxcb libxcb-devel libX11-xcb libXcursor-devel libXrandr-devel libXinerama-devel libXi-devel libXext-devel libxkbcommon libxkbcommon-devel libxkbcommon-x11-devel mesa-vulkan-drivers wayland-protocols-devel wayland-devel
+
+    - name: Configure CMake
+      run: cmake --preset release
+
+    - name: Build
+      run: cmake --build --preset release
+
+    - name: Collect Dawn Artifacts
+      run: |
+        mkdir -p dawn-artifacts/linux/lib
+        mkdir -p dawn-artifacts/linux/include
+        # Copy Dawn shared library
+        cp build/release/_deps/dawn-build/src/dawn/native/libwebgpu_dawn.so dawn-artifacts/linux/lib/
+        # Copy headers (forwarding header)
+        cp -r build/release/_deps/dawn-src/include/* dawn-artifacts/linux/include/
+        # Copy generated headers (actual implementation)
+        cp -r build/release/_deps/dawn-build/gen/include/* dawn-artifacts/linux/include/
+
+    - name: Upload Dawn Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dawn-linux-x64
+        path: dawn-artifacts/
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up MSBuild
+      uses: microsoft/setup-msbuild@v1.3
+
+    - name: Configure CMake
+      run: cmake -S . -B build/release -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build/release --config Release
+
+    - name: Collect Dawn Artifacts
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path dawn-artifacts/windows/lib
+        New-Item -ItemType Directory -Force -Path dawn-artifacts/windows/include
+        # Copy Dawn DLL and lib
+        Copy-Item build/release/_deps/dawn-build/src/dawn/native/Release/webgpu_dawn.dll dawn-artifacts/windows/lib/
+        Copy-Item build/release/_deps/dawn-build/src/dawn/native/Release/webgpu_dawn.lib dawn-artifacts/windows/lib/
+        # Copy headers (forwarding header)
+        Copy-Item -Recurse build/release/_deps/dawn-src/include/* dawn-artifacts/windows/include/
+        # Copy generated headers (actual implementation)
+        Copy-Item -Recurse build/release/_deps/dawn-build/gen/include/* dawn-artifacts/windows/include/
+
+    - name: Upload Dawn Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dawn-windows-x64
+        path: dawn-artifacts/
+
+  build-macos-universal:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Build for Apple Silicon (ARM64)
+      run: |
+        cmake -S . -B build/release-arm64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+        cmake --build build/release-arm64 --config Release
+
+    - name: Build for Intel (x86_64)
+      run: |
+        cmake -S . -B build/release-x86_64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
+        cmake --build build/release-x86_64 --config Release
+
+    - name: Collect Dawn Artifacts
+      run: |
+        mkdir -p dawn-artifacts/macos/lib
+        mkdir -p dawn-artifacts/macos/include
+        # Create universal Dawn library
+        lipo -create -output dawn-artifacts/macos/lib/libwebgpu_dawn.dylib \
+          build/release-arm64/_deps/dawn-build/src/dawn/native/libwebgpu_dawn.dylib \
+          build/release-x86_64/_deps/dawn-build/src/dawn/native/libwebgpu_dawn.dylib
+        # Copy headers from arm64 build (both builds have same headers)
+        cp -r build/release-arm64/_deps/dawn-src/include/* dawn-artifacts/macos/include/
+        cp -r build/release-arm64/_deps/dawn-build/gen/include/* dawn-artifacts/macos/include/
+
+    - name: Upload Dawn Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dawn-macos-universal
+        path: dawn-artifacts/
