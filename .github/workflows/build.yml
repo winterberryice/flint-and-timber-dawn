@@ -60,37 +60,14 @@ jobs:
     - name: Build
       run: cmake --build build/release --config Release
 
-    - name: Debug - Find Dawn artifacts
-      shell: pwsh
-      run: |
-        Write-Host "=== Searching for webgpu_dawn.dll ==="
-        Get-ChildItem -Path build/release -Recurse -Filter "webgpu_dawn.dll" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-        
-        Write-Host "`n=== Searching for webgpu_dawn.lib ==="
-        Get-ChildItem -Path build/release -Recurse -Filter "webgpu_dawn.lib" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName }
-        
-        Write-Host "`n=== Searching for dawn-src include directory ==="
-        Get-ChildItem -Path build/release/_deps -Recurse -Directory -Filter "include" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*dawn-src*" } | ForEach-Object { Write-Host $_.FullName }
-        
-        Write-Host "`n=== Searching for dawn-build gen/include directory ==="
-        Get-ChildItem -Path build/release/_deps -Recurse -Directory -Filter "include" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*dawn-build*gen*" } | ForEach-Object { Write-Host $_.FullName }
-        
-        Write-Host "`n=== Checking if dawn-src directory exists ==="
-        Test-Path build/release/_deps/dawn-src
-        
-        Write-Host "`n=== Checking if dawn-build directory exists ==="
-        Test-Path build/release/_deps/dawn-build
-        
-        Write-Host "`n=== Listing _deps directory structure (first 3 levels) ==="
-        Get-ChildItem -Path build/release/_deps -Recurse -Depth 3 -Directory | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }
-
     - name: Collect Dawn Artifacts
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path dawn-artifacts/windows/lib
         New-Item -ItemType Directory -Force -Path dawn-artifacts/windows/include
-        # Copy Dawn DLL and lib
-        Copy-Item build/release/_deps/dawn-build/src/dawn/native/Release/webgpu_dawn.dll dawn-artifacts/windows/lib/
+        # Copy Dawn DLL (from Release root directory)
+        Copy-Item build/release/_deps/dawn-build/Release/webgpu_dawn.dll dawn-artifacts/windows/lib/
+        # Copy Dawn .lib (from native/Release directory)
         Copy-Item build/release/_deps/dawn-build/src/dawn/native/Release/webgpu_dawn.lib dawn-artifacts/windows/lib/
         # Copy headers (forwarding header)
         Copy-Item -Recurse build/release/_deps/dawn-src/include/* dawn-artifacts/windows/include/
