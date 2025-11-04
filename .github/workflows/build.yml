@@ -113,3 +113,79 @@ jobs:
       with:
         name: dawn-macos-universal
         path: dawn-artifacts/
+
+  create-release:
+    needs: [build-linux, build-windows, build-macos-universal]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download Linux artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dawn-linux-x64
+        path: artifacts/linux
+
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dawn-windows-x64
+        path: artifacts/windows
+
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: dawn-macos-universal
+        path: artifacts/macos
+
+    - name: Package artifacts
+      run: |
+        cd artifacts/linux
+        tar -czf ../../dawn-linux-x64.tar.gz *
+        cd ../windows
+        zip -r ../../dawn-windows-x64.zip *
+        cd ../macos
+        tar -czf ../../dawn-macos-universal.tar.gz *
+        cd ../..
+
+    - name: Get Dawn tag
+      id: tag
+      run: |
+        TAG=$(cat third_party/webgpu/dawn/dawn-git-tag.txt | tr -d '[:space:]')
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Using Dawn tag: $TAG"
+
+    - name: Delete existing release if present
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
+        echo "Cleaned up any existing release"
+
+    - name: Create Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "${{ steps.tag.outputs.tag }}" \
+          --title "Dawn WebGPU Binaries - ${{ steps.tag.outputs.tag }}" \
+          --notes "Automated build of Dawn WebGPU binaries for Linux, Windows, and macOS.
+
+          **Dawn Version:** \`${{ steps.tag.outputs.tag }}\`
+          **Built from commit:** ${{ github.sha }}
+
+          **Platforms:**
+          - Linux x64
+          - Windows x64
+          - macOS Universal (ARM64 + x86_64)
+
+          **Files:**
+          - \`dawn-linux-x64.tar.gz\` - Linux binaries and headers
+          - \`dawn-windows-x64.zip\` - Windows DLL, LIB, and headers
+          - \`dawn-macos-universal.tar.gz\` - macOS universal binaries and headers" \
+          dawn-linux-x64.tar.gz \
+          dawn-windows-x64.zip \
+          dawn-macos-universal.tar.gz
