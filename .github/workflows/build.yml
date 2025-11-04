@@ -152,22 +152,30 @@ jobs:
         tar -czf ../../dawn-macos-universal.tar.gz *
         cd ../..
 
-    - name: Generate release tag
+    - name: Get Dawn tag
       id: tag
       run: |
-        TAG="dawn-$(date +'%Y%m%d-%H%M%S')-${GITHUB_SHA::7}"
+        TAG=$(cat third_party/webgpu/dawn/dawn-git-tag.txt | tr -d '[:space:]')
         echo "tag=$TAG" >> $GITHUB_OUTPUT
-        echo "Generated tag: $TAG"
+        echo "Using Dawn tag: $TAG"
+
+    - name: Delete existing release if present
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release delete "${{ steps.tag.outputs.tag }}" --yes || true
+        echo "Cleaned up any existing release"
 
     - name: Create Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         gh release create "${{ steps.tag.outputs.tag }}" \
-          --title "Dawn Binaries ${{ steps.tag.outputs.tag }}" \
+          --title "Dawn WebGPU Binaries - ${{ steps.tag.outputs.tag }}" \
           --notes "Automated build of Dawn WebGPU binaries for Linux, Windows, and macOS.
 
-          Built from commit: ${{ github.sha }}
+          **Dawn Version:** \`${{ steps.tag.outputs.tag }}\`
+          **Built from commit:** ${{ github.sha }}
 
           **Platforms:**
           - Linux x64
